@@ -14,7 +14,7 @@ main =
             , width = 600
             , height = 400
             , tileSize = 256
-            , topLeft = { lng = 16375.5, lat = 10895.5 }
+            , center = { lng = 16375.5, lat = 10895.5 }
             , zoomLevel = 15
             }
     in

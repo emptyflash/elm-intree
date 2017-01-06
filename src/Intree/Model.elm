@@ -2,6 +2,7 @@ module Intree.Model exposing (..)
 
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Decode exposing (float, int, Decoder)
+import Set exposing (Set)
 
 
 type alias Options =
@@ -9,16 +10,16 @@ type alias Options =
     , width : Int
     , height : Int
     , tileSize : Int
-    , topLeft : Coordinate
+    , center : Coordinate
     , zoomLevel : Int
     }
 
 
 type alias Model =
-    { layer : Layer
+    { tiles : Set Tile
     , prevPosition : Point
     , dragging : Bool
-    , topLeft : Coordinate
+    , center : Coordinate
     , zoomLevel : Int
     , options : Options
     }
@@ -44,10 +45,7 @@ type alias WheelEvent =
 
 
 type alias Tile =
-    { x : Int
-    , y : Int
-    , z : Int
-    }
+    ( Int, Int, Int )
 
 
 type alias Layer =

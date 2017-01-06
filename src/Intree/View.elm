@@ -13,6 +13,7 @@ import Intree.Update as Update exposing (Msg(..))
 import Html exposing (..)
 import Html.Attributes as Attributes exposing (..)
 import Html.Events exposing (on, onWithOptions, onMouseUp)
+import Set
 
 
 onMouseDown : Attribute Msg
@@ -30,7 +31,7 @@ onWheel =
             }
     in
         onWithOptions "wheel" wheelOptions wheelEventDecoder
-            |> Attributes.map Wheel
+            |> Attributes.map Zoom
 
 
 intreeContainerStyle : Model -> Attribute msg
@@ -58,7 +59,7 @@ debugOverlay model =
         []
         [ span
             [ style [ ( "position", "absolute" ), ( "top", "0" ), ( "left", "0" ) ] ]
-            [ text (toString model.topLeft) ]
+            [ text (toString model.center) ]
         , span
             [ style [ ( "position", "absolute" ), ( "top", "0" ), ( "right", "0" ) ] ]
             [ text (toString model.zoomLevel) ]
@@ -79,16 +80,16 @@ intreeMapPaneStyle =
 
 
 tileImgStyle : Model -> Tile -> Attribute msg
-tileImgStyle model tile =
+tileImgStyle model ( tileX, tileY, _ ) =
     let
-        calcOffset pos coord =
-            toString <| truncate <| (toFloat pos - coord) * toFloat model.options.tileSize
+        calcOffset pos coord dimenson =
+            toString <| truncate <| (toFloat pos - coord) * toFloat model.options.tileSize - (toFloat dimenson / 2.0)
 
         translate =
             "translate3d("
-                ++ calcOffset tile.x model.topLeft.lng
+                ++ calcOffset tileX model.center.lng model.options.width
                 ++ "px, "
-                ++ calcOffset tile.y model.topLeft.lat
+                ++ calcOffset tileY model.center.lat model.options.height
                 ++ "px, 0px)"
     in
         style
@@ -104,13 +105,13 @@ tileImgStyle model tile =
 
 
 tileImgSrc : Model -> Tile -> Attribute msg
-tileImgSrc model tile =
+tileImgSrc model ( tileX, tileY, tileZ ) =
     model.options.baseUrl
-        ++ toString tile.z
+        ++ toString tileZ
         ++ "/"
-        ++ toString tile.x
+        ++ toString tileX
         ++ "/"
-        ++ toString tile.y
+        ++ toString tileY
         ++ ".png?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpandmbXliNDBjZWd2M2x6bDk3c2ZtOTkifQ._QA7i5Mpkd_m30IGElHziw"
         |> src
 
@@ -133,7 +134,8 @@ view model =
         , onWheel
         , intreeContainerStyle model
         ]
-        [ model.layer
+        [ model.tiles
+            |> Set.toList
             |> List.map (tileImg model)
             |> div [ intreeMapPaneStyle ]
         , div

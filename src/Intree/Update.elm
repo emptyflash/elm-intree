@@ -11,13 +11,17 @@ import Intree.Model as Model
         , Layer
         )
 import Mouse
+import Task
+import List
+import Set
 
 
 type Msg
     = Pan Int Int
     | StartDrag Point
     | StopDrag
-    | Wheel WheelEvent
+    | Zoom WheelEvent
+    | LoadTiles
 
 
 subscriptions : Model -> Sub Msg
@@ -31,8 +35,8 @@ subscriptions model =
         Sub.none
 
 
-initLayer : Options -> Layer
-initLayer options =
+loadTiles : Options -> Coordinate -> List Tile
+loadTiles options center =
     let
         numHorizontal =
             ceiling <| toFloat options.width / toFloat options.tileSize
@@ -40,39 +44,30 @@ initLayer options =
         numVertical =
             ceiling <| toFloat options.height / toFloat options.tileSize
 
-        startX =
-            floor options.topLeft.lng
+        topLng =
+            floor <| center.lng + (toFloat options.width / 2.0 / toFloat options.tileSize)
 
-        startY =
-            floor options.topLeft.lat
+        leftLat =
+            floor <| center.lat + (toFloat options.height / 2.0 / toFloat options.tileSize)
 
         horizontalRange =
-            List.range startX (startX + numHorizontal)
+            List.range topLng (topLng + numHorizontal)
 
         verticalRange =
-            List.range startY (startY + numVertical)
-
-        almostTiles =
-            List.concatMap
-                (\x ->
-                    List.map
-                        (Tile x)
-                        verticalRange
-                )
-                horizontalRange
+            List.range leftLat (leftLat + numVertical)
     in
         horizontalRange
-            |> List.map Tile
+            |> List.map (,,)
             |> List.concatMap (\tileX -> List.map tileX verticalRange)
             |> List.map (\tileXY -> tileXY options.zoomLevel)
 
 
 init : Options -> ( Model, Cmd Msg )
 init options =
-    ( { layer = initLayer options
+    ( { tiles = Set.fromList <| loadTiles options options.center
       , prevPosition = Point 0 0
       , dragging = False
-      , topLeft = options.topLeft
+      , center = options.center
       , zoomLevel = options.zoomLevel
       , options = options
       }
@@ -100,13 +95,23 @@ update msg model =
                 newModel =
                     { model
                         | prevPosition = Point x y
-                        , topLeft =
-                            { lng = model.topLeft.lng + moveLng
-                            , lat = model.topLeft.lat + moveLat
+                        , center =
+                            { lng = model.center.lng + moveLng
+                            , lat = model.center.lat + moveLat
                             }
                     }
             in
-                ( newModel, Cmd.none )
+                ( newModel, Task.perform (\_ -> LoadTiles) <| Task.succeed () )
 
-        Wheel event ->
+        Zoom event ->
             ( { model | zoomLevel = model.zoomLevel + round event.deltaY }, Cmd.none )
+
+        LoadTiles ->
+            let
+                newTiles =
+                    loadTiles model.options model.center
+
+                newTileSet =
+                    List.foldr Set.insert model.tiles newTiles
+            in
+                ( { model | tiles = newTileSet }, Cmd.none )
