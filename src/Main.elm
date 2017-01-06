@@ -8,9 +8,19 @@ import Intree.View as Intree
 
 
 main =
-    Html.program
-        { init = Intree.init
-        , view = Intree.view
-        , update = Intree.update
-        , subscriptions = Intree.subscriptions
-        }
+    let
+        options =
+            { baseUrl = "https://api.tiles.mapbox.com/v4/mapbox.streets/"
+            , width = 600
+            , height = 400
+            , tileSize = 256
+            , topLeft = { lng = 16375.5, lat = 10895.5 }
+            , zoomLevel = 15
+            }
+    in
+        Html.program
+            { init = Intree.init options
+            , view = Intree.view
+            , update = Intree.update
+            , subscriptions = Intree.subscriptions
+            }

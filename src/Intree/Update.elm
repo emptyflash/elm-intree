@@ -1,12 +1,21 @@
 module Intree.Update exposing (..)
 
-import Intree.Model as Model exposing (Model, WheelEvent, MouseEvent)
+import Intree.Model as Model
+    exposing
+        ( Options
+        , Model
+        , WheelEvent
+        , Coordinate
+        , Point
+        , Tile
+        , Layer
+        )
 import Mouse
 
 
 type Msg
     = Pan Int Int
-    | StartDrag MouseEvent
+    | StartDrag Point
     | StopDrag
     | Wheel WheelEvent
 
@@ -14,21 +23,58 @@ type Msg
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.dragging then
-        Mouse.moves (\{ x, y } -> Pan x y)
+        Sub.batch
+            [ Mouse.moves (\{ x, y } -> Pan x y)
+            , Mouse.ups (\_ -> StopDrag)
+            ]
     else
         Sub.none
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( { mousePosition = MouseEvent 0 0
-      , prevPosition = MouseEvent 0 0
+initLayer : Options -> Layer
+initLayer options =
+    let
+        numHorizontal =
+            ceiling <| toFloat options.width / toFloat options.tileSize
+
+        numVertical =
+            ceiling <| toFloat options.height / toFloat options.tileSize
+
+        startX =
+            floor options.topLeft.lng
+
+        startY =
+            floor options.topLeft.lat
+
+        horizontalRange =
+            List.range startX (startX + numHorizontal)
+
+        verticalRange =
+            List.range startY (startY + numVertical)
+
+        almostTiles =
+            List.concatMap
+                (\x ->
+                    List.map
+                        (Tile x)
+                        verticalRange
+                )
+                horizontalRange
+    in
+        horizontalRange
+            |> List.map Tile
+            |> List.concatMap (\tileX -> List.map tileX verticalRange)
+            |> List.map (\tileXY -> tileXY options.zoomLevel)
+
+
+init : Options -> ( Model, Cmd Msg )
+init options =
+    ( { layer = initLayer options
+      , prevPosition = Point 0 0
       , dragging = False
-      , topLeft = { lat = 0, lng = 0 }
-      , topRight = { lat = 10, lng = 0 }
-      , bottomLeft = { lat = 0, lng = 10 }
-      , bottomRight = { lat = 10, lng = 10 }
-      , zoomLevel = 0
+      , topLeft = options.topLeft
+      , zoomLevel = options.zoomLevel
+      , options = options
       }
     , Cmd.none
     )
@@ -38,7 +84,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         StartDrag pos ->
-            ( { model | dragging = True, mousePosition = pos }, Cmd.none )
+            ( { model | dragging = True, prevPosition = pos }, Cmd.none )
 
         StopDrag ->
             ( { model | dragging = False }, Cmd.none )
@@ -46,30 +92,17 @@ update msg model =
         Pan x y ->
             let
                 moveLng =
-                    model.prevPosition.x - model.mousePosition.x
+                    toFloat (model.prevPosition.x - x) / 256.0
 
                 moveLat =
-                    model.mousePosition.y - model.prevPosition.y
+                    toFloat (model.prevPosition.y - y) / 256.0
 
                 newModel =
                     { model
-                        | mousePosition = MouseEvent x y
-                        , prevPosition = model.mousePosition
+                        | prevPosition = Point x y
                         , topLeft =
-                            { lng = model.topLeft.lng - moveLng
+                            { lng = model.topLeft.lng + moveLng
                             , lat = model.topLeft.lat + moveLat
-                            }
-                        , topRight =
-                            { lng = model.topRight.lng - moveLng
-                            , lat = model.topRight.lat + moveLat
-                            }
-                        , bottomLeft =
-                            { lng = model.bottomLeft.lng - moveLng
-                            , lat = model.bottomLeft.lat + moveLat
-                            }
-                        , bottomRight =
-                            { lng = model.bottomRight.lng - moveLng
-                            , lat = model.bottomRight.lat + moveLat
                             }
                     }
             in
