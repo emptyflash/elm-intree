@@ -9,11 +9,12 @@ import Intree.Model as Model
         , Point
         , Tile
         , Layer
+        , tileId
         )
 import Mouse
 import Task
 import List
-import Set
+import Dict exposing (Dict)
 
 
 type Msg
@@ -22,6 +23,7 @@ type Msg
     | StopDrag
     | Zoom WheelEvent
     | LoadTiles
+    | ImageLoaded String
 
 
 subscriptions : Model -> Sub Msg
@@ -35,7 +37,7 @@ subscriptions model =
         Sub.none
 
 
-loadTiles : Options -> Coordinate -> List Tile
+loadTiles : Options -> Coordinate -> Dict String Tile
 loadTiles options center =
     let
         numHorizontal =
@@ -57,14 +59,17 @@ loadTiles options center =
             List.range leftLat (leftLat + numVertical)
     in
         horizontalRange
-            |> List.map (,,)
+            |> List.map Tile
             |> List.concatMap (\tileX -> List.map tileX verticalRange)
             |> List.map (\tileXY -> tileXY options.zoomLevel)
+            |> List.map (\tileXYZ -> tileXYZ False)
+            |> List.map (\tile -> ( tileId tile, tile ))
+            |> Dict.fromList
 
 
 init : Options -> ( Model, Cmd Msg )
 init options =
-    ( { tiles = Set.fromList <| loadTiles options options.center
+    ( { tiles = loadTiles options options.center
       , prevPosition = Point 0 0
       , dragging = False
       , center = options.center
@@ -110,8 +115,18 @@ update msg model =
             let
                 newTiles =
                     loadTiles model.options model.center
-
-                newTileSet =
-                    List.foldr Set.insert model.tiles newTiles
             in
-                ( { model | tiles = newTileSet }, Cmd.none )
+                ( { model | tiles = Dict.union model.tiles newTiles }, Cmd.none )
+
+        ImageLoaded loadedTileId ->
+            let
+                load tile =
+                    { tile | loaded = True }
+
+                maybeLoad =
+                    Maybe.map load
+
+                newTiles =
+                    Dict.update loadedTileId maybeLoad model.tiles
+            in
+                ( { model | tiles = newTiles }, Cmd.none )

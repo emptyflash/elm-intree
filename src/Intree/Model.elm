@@ -1,8 +1,8 @@
 module Intree.Model exposing (..)
 
 import Json.Decode.Pipeline exposing (decode, required)
-import Json.Decode exposing (float, int, Decoder)
-import Set exposing (Set)
+import Json.Decode as Decode exposing (float, int, string, Decoder)
+import Dict exposing (Dict)
 
 
 type alias Options =
@@ -16,7 +16,7 @@ type alias Options =
 
 
 type alias Model =
-    { tiles : Set Tile
+    { tiles : Dict String Tile
     , prevPosition : Point
     , dragging : Bool
     , center : Coordinate
@@ -45,7 +45,16 @@ type alias WheelEvent =
 
 
 type alias Tile =
-    ( Int, Int, Int )
+    { x : Int
+    , y : Int
+    , z : Int
+    , loaded : Bool
+    }
+
+
+tileId : Tile -> String
+tileId { x, y, z } =
+    toString x ++ toString y ++ toString z
 
 
 type alias Layer =
@@ -56,8 +65,8 @@ type alias Map =
     List Layer
 
 
-wheelEventDecoder : Decoder WheelEvent
-wheelEventDecoder =
+decodeWheelEvent : Decoder WheelEvent
+decodeWheelEvent =
     decode WheelEvent
         |> required "deltaX" float
         |> required "deltaY" float
@@ -69,3 +78,8 @@ decodePoint =
     decode Point
         |> required "pageX" int
         |> required "pageY" int
+
+
+decodeLoadEvent : Decoder String
+decodeLoadEvent =
+    Decode.at [ "target", "id" ] string

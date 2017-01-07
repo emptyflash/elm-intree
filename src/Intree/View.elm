@@ -6,14 +6,17 @@ import Intree.Model as Model
         , Coordinate
         , Tile
         , Options
+        , tileId
         , decodePoint
-        , wheelEventDecoder
+        , decodeWheelEvent
+        , decodeLoadEvent
         )
 import Intree.Update as Update exposing (Msg(..))
-import Html exposing (..)
+import Html exposing (Attribute, Html, text, div, img, span)
 import Html.Attributes as Attributes exposing (..)
 import Html.Events exposing (on, onWithOptions, onMouseUp)
-import Set
+import Html.Keyed exposing (node)
+import Dict
 
 
 onMouseDown : Attribute Msg
@@ -30,8 +33,14 @@ onWheel =
             , preventDefault = True
             }
     in
-        onWithOptions "wheel" wheelOptions wheelEventDecoder
+        onWithOptions "wheel" wheelOptions decodeWheelEvent
             |> Attributes.map Zoom
+
+
+onLoad : Attribute Msg
+onLoad =
+    on "load" decodeLoadEvent
+        |> Attributes.map ImageLoaded
 
 
 intreeContainerStyle : Model -> Attribute msg
@@ -80,20 +89,27 @@ intreeMapPaneStyle =
 
 
 tileImgStyle : Model -> Tile -> Attribute msg
-tileImgStyle model ( tileX, tileY, _ ) =
+tileImgStyle model { x, y, loaded } =
     let
         calcOffset pos coord dimenson =
             toString <| truncate <| (toFloat pos - coord) * toFloat model.options.tileSize - (toFloat dimenson / 2.0)
 
         translate =
             "translate3d("
-                ++ calcOffset tileX model.center.lng model.options.width
+                ++ calcOffset x model.center.lng model.options.width
                 ++ "px, "
-                ++ calcOffset tileY model.center.lat model.options.height
+                ++ calcOffset y model.center.lat model.options.height
                 ++ "px, 0px)"
     in
         style
             [ ( "transform", translate )
+            , ( "transition", "opacity 0.2s linear" )
+            , ( "opacity"
+              , if loaded then
+                    "1"
+                else
+                    "0"
+              )
             , ( "-webkit-user-drag", "none" )
             , ( "-webkit-user-select", "none" )
             , ( "width", "256px" )
@@ -105,13 +121,13 @@ tileImgStyle model ( tileX, tileY, _ ) =
 
 
 tileImgSrc : Model -> Tile -> Attribute msg
-tileImgSrc model ( tileX, tileY, tileZ ) =
+tileImgSrc model { x, y, z } =
     model.options.baseUrl
-        ++ toString tileZ
+        ++ toString z
         ++ "/"
-        ++ toString tileX
+        ++ toString x
         ++ "/"
-        ++ toString tileY
+        ++ toString y
         ++ ".png?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpandmbXliNDBjZWd2M2x6bDk3c2ZtOTkifQ._QA7i5Mpkd_m30IGElHziw"
         |> src
 
@@ -122,6 +138,8 @@ tileImg model tile =
         [ tileImgSrc model tile
         , draggable "false"
         , tileImgStyle model tile
+        , id <| tileId tile
+        , onLoad
         ]
         []
 
@@ -135,9 +153,9 @@ view model =
         , intreeContainerStyle model
         ]
         [ model.tiles
-            |> Set.toList
-            |> List.map (tileImg model)
-            |> div [ intreeMapPaneStyle ]
+            |> Dict.toList
+            |> List.map (\( id, tile ) -> ( id, tileImg model tile ))
+            |> node "div" [ intreeMapPaneStyle ]
         , div
             -- Controls
             []
