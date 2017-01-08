@@ -78,8 +78,7 @@ debugOverlay model =
 intreeMapPaneStyle : Attribute msg
 intreeMapPaneStyle =
     style
-        [ ( "z-index", "400" )
-        , ( "position", "absolute" )
+        [ ( "position", "absolute" )
         , ( "left", "0" )
         , ( "top", "0" )
         , ( "-webkit-user-drag", "none" )

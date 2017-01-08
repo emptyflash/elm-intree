@@ -37,8 +37,8 @@ subscriptions model =
         Sub.none
 
 
-loadTiles : Options -> Coordinate -> Dict String Tile
-loadTiles options center =
+loadTiles : Options -> Coordinate -> Int -> Dict String Tile
+loadTiles options center zoom =
     let
         numHorizontal =
             ceiling <| toFloat options.width / toFloat options.tileSize
@@ -61,7 +61,7 @@ loadTiles options center =
         horizontalRange
             |> List.map Tile
             |> List.concatMap (\tileX -> List.map tileX verticalRange)
-            |> List.map (\tileXY -> tileXY options.zoomLevel)
+            |> List.map (\tileXY -> tileXY zoom)
             |> List.map (\tileXYZ -> tileXYZ False)
             |> List.map (\tile -> ( tileId tile, tile ))
             |> Dict.fromList
@@ -69,7 +69,7 @@ loadTiles options center =
 
 init : Options -> ( Model, Cmd Msg )
 init options =
-    ( { tiles = loadTiles options options.center
+    ( { tiles = loadTiles options options.center options.zoomLevel
       , prevPosition = Point 0 0
       , dragging = False
       , center = options.center
@@ -78,6 +78,11 @@ init options =
       }
     , Cmd.none
     )
+
+
+loadTilesCmd : Cmd Msg
+loadTilesCmd =
+    Task.perform (\_ -> LoadTiles) <| Task.succeed ()
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -106,15 +111,25 @@ update msg model =
                             }
                     }
             in
-                ( newModel, Task.perform (\_ -> LoadTiles) <| Task.succeed () )
+                ( newModel, loadTilesCmd )
 
         Zoom event ->
-            ( { model | zoomLevel = model.zoomLevel + round event.deltaY }, Cmd.none )
+            let
+                delta =
+                    if event.deltaY > 0 then
+                        1
+                    else
+                        -1
+
+                newModel =
+                    { model | zoomLevel = model.zoomLevel + round delta }
+            in
+                ( newModel, loadTilesCmd )
 
         LoadTiles ->
             let
                 newTiles =
-                    loadTiles model.options model.center
+                    loadTiles model.options model.center model.zoomLevel
             in
                 ( { model | tiles = Dict.union model.tiles newTiles }, Cmd.none )
 
