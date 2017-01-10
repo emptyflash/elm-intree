@@ -9,12 +9,17 @@ import Intree.Model as Model
         , Point
         , Tile
         , Layer
+        , TileId
+        , TileMap
         , tileId
         )
 import Mouse
-import Task
+import Task exposing (Task)
 import List
+import Task
+import List.Extra as List
 import Dict exposing (Dict)
+import WebGL.Texture as Texture exposing (Texture, Error)
 
 
 type Msg
@@ -23,7 +28,8 @@ type Msg
     | StopDrag
     | Zoom WheelEvent
     | LoadTiles
-    | ImageLoaded String
+    | TextureLoad String Texture
+    | TextureError Error
 
 
 subscriptions : Model -> Sub Msg
@@ -62,27 +68,88 @@ loadTiles options center zoom =
             |> List.map Tile
             |> List.concatMap (\tileX -> List.map tileX verticalRange)
             |> List.map (\tileXY -> tileXY zoom)
-            |> List.map (\tileXYZ -> tileXYZ False)
+            |> List.map (\tileXYZ -> tileXYZ Nothing)
             |> List.map (\tile -> ( tileId tile, tile ))
             |> Dict.fromList
 
 
 init : Options -> ( Model, Cmd Msg )
 init options =
-    ( { tiles = loadTiles options options.center options.zoomLevel
-      , prevPosition = Point 0 0
-      , dragging = False
-      , center = options.center
-      , zoomLevel = options.zoomLevel
-      , options = options
-      }
-    , Cmd.none
-    )
+    let
+        newTiles =
+            loadTiles options options.center options.zoomLevel
+    in
+        ( { tiles = newTiles
+          , prevPosition = Point 0 0
+          , dragging = False
+          , center = options.center
+          , zoomLevel = options.zoomLevel
+          , options = options
+          }
+        , loadTexturesCmd options.baseUrl newTiles
+        )
 
 
 loadTilesCmd : Cmd Msg
 loadTilesCmd =
     Task.perform (\_ -> LoadTiles) <| Task.succeed ()
+
+
+isNothing : Maybe a -> Bool
+isNothing maybe =
+    case maybe of
+        Nothing ->
+            True
+
+        Just _ ->
+            False
+
+
+handleLoadResult : TileId -> Result Error Texture -> Msg
+handleLoadResult tileId result =
+    case result of
+        Err err ->
+            TextureError err
+
+        Ok texture ->
+            TextureLoad tileId texture
+
+
+attemptTileTasks : TileId -> Task Error Texture -> Cmd Msg
+attemptTileTasks tileId task =
+    Task.attempt (handleLoadResult tileId) task
+
+
+loadTexturesCmd : String -> TileMap -> Cmd Msg
+loadTexturesCmd baseUrl tiles =
+    let
+        tileLoadTasks =
+            tiles
+                |> Dict.toList
+                |> List.map Tuple.second
+                |> List.filter (\tile -> isNothing tile.texture)
+                |> List.map (tileImageUrl baseUrl)
+                |> List.map Texture.load
+
+        tileIds =
+            tiles
+                |> Dict.toList
+                |> List.map Tuple.first
+    in
+        List.zip tileIds tileLoadTasks
+            |> List.map (uncurry attemptTileTasks)
+            |> Cmd.batch
+
+
+tileImageUrl : String -> Tile -> String
+tileImageUrl baseUrl { x, y, z } =
+    baseUrl
+        ++ toString z
+        ++ "/"
+        ++ toString x
+        ++ "/"
+        ++ toString y
+        ++ ".png?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpandmbXliNDBjZWd2M2x6bDk3c2ZtOTkifQ._QA7i5Mpkd_m30IGElHziw"
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -133,15 +200,19 @@ update msg model =
             in
                 ( { model | tiles = Dict.union model.tiles newTiles }, Cmd.none )
 
-        ImageLoaded loadedTileId ->
+        TextureLoad tileId texture ->
             let
                 load tile =
-                    { tile | loaded = True }
+                    { tile | texture = Just texture }
 
                 maybeLoad =
                     Maybe.map load
 
                 newTiles =
-                    Dict.update loadedTileId maybeLoad model.tiles
+                    Dict.update tileId maybeLoad model.tiles
             in
                 ( { model | tiles = newTiles }, Cmd.none )
+
+        TextureError error ->
+            ( model, Cmd.none )
+                |> Debug.log (toString error)

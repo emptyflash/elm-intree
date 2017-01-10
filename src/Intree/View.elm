@@ -17,6 +17,11 @@ import Html.Attributes as Attributes exposing (..)
 import Html.Events exposing (on, onWithOptions, onMouseUp)
 import Html.Keyed exposing (node)
 import Dict
+import WebGL exposing (Entity, Shader, Mesh)
+import WebGL.Texture exposing (Texture)
+import Math.Vector2 as Vec2 exposing (Vec2, vec2)
+import Math.Vector3 as Vec3 exposing (Vec3, vec3)
+import Math.Matrix4 as Mat4 exposing (Mat4)
 
 
 onMouseDown : Attribute Msg
@@ -35,12 +40,6 @@ onWheel =
     in
         onWithOptions "wheel" wheelOptions decodeWheelEvent
             |> Attributes.map Zoom
-
-
-onLoad : Attribute Msg
-onLoad =
-    on "load" decodeLoadEvent
-        |> Attributes.map ImageLoaded
 
 
 intreeContainerStyle : Model -> Attribute msg
@@ -87,74 +86,117 @@ intreeMapPaneStyle =
         ]
 
 
-tileImgStyle : Model -> Tile -> Attribute msg
-tileImgStyle model { x, y, loaded } =
+type alias Vertex =
+    { position : Vec3
+    , textureCoord : Vec2
+    }
+
+
+tileMesh : Mesh Vertex
+tileMesh =
     let
-        calcOffset pos coord dimenson =
-            toString <| truncate <| (toFloat pos - coord) * toFloat model.options.tileSize - (toFloat dimenson / 2.0)
+        topLeft =
+            { position = vec3 -1 1 0, textureCoord = vec2 0 1 }
 
-        translate =
-            "translate3d("
-                ++ calcOffset x model.center.lng model.options.width
-                ++ "px, "
-                ++ calcOffset y model.center.lat model.options.height
-                ++ "px, 0px)"
-    in
-        style
-            [ ( "transform", translate )
-            , ( "transition", "opacity 0.2s linear" )
-            , ( "opacity"
-              , if loaded then
-                    "1"
-                else
-                    "0"
-              )
-            , ( "-webkit-user-drag", "none" )
-            , ( "-webkit-user-select", "none" )
-            , ( "width", "256px" )
-            , ( "height", "256px" )
-            , ( "position", "absolute" )
-            , ( "top", "0" )
-            , ( "left", "0" )
+        topRight =
+            { position = vec3 1 1 0, textureCoord = vec2 1 1 }
+
+        bottomLeft =
+            { position = vec3 -1 -1 0, textureCoord = vec2 0 0 }
+
+        bottomRight =
+            { position = vec3 1 -1 0, textureCoord = vec2 1 0 }
+
+        square =
+            [ ( topLeft, topRight, bottomLeft )
+            , ( bottomLeft, topRight, bottomRight )
             ]
+    in
+        WebGL.triangles square
 
 
-tileImgSrc : Model -> Tile -> Attribute msg
-tileImgSrc model { x, y, z } =
-    model.options.baseUrl
-        ++ toString z
-        ++ "/"
-        ++ toString x
-        ++ "/"
-        ++ toString y
-        ++ ".png?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpandmbXliNDBjZWd2M2x6bDk3c2ZtOTkifQ._QA7i5Mpkd_m30IGElHziw"
-        |> src
+type alias Varying =
+    { vcoord : Vec2
+    }
 
 
-tileImg : Model -> Tile -> Html Msg
-tileImg model tile =
-    img
-        [ tileImgSrc model tile
-        , draggable "false"
-        , tileImgStyle model tile
-        , id <| tileId tile
-        , onLoad
-        ]
-        []
+type alias Uniform =
+    { rotation : Mat4
+    , perspective : Mat4
+    , camera : Mat4
+    , texture : Texture
+    }
+
+
+tileUniform : Texture -> Uniform
+tileUniform =
+    Uniform
+        (Mat4.makeRotate 0 (vec3 0 1 0))
+        (Mat4.makePerspective 45 1 0.01 100)
+        (Mat4.makeLookAt (vec3 0 3 8) (vec3 0 0 0) (vec3 0 1 0))
+
+
+tileVS : Shader Vertex Uniform Varying
+tileVS =
+    [glsl|
+        attribute vec2 textureCoord;
+        attribute vec3 position;
+        uniform mat4 perspective;
+        uniform mat4 camera;
+        uniform mat4 rotation;
+        varying vec2 vcoord;
+
+        void main () {
+            gl_Position = perspective * camera * rotation * vec4(position, 1.0);
+            vcoord = textureCoord;
+        }
+    |]
+
+
+tileFS : Shader {} { u | texture : Texture } Varying
+tileFS =
+    [glsl|
+        precision mediump float;
+        uniform sampler2D texture;
+        varying vec2 vcoord;
+
+        void main () {
+            gl_FragColor = texture2D(texture, vcoord);
+        }
+    |]
+
+
+tileEntity : Model -> Tile -> Maybe Entity
+tileEntity model tile =
+    tile.texture
+        |> Maybe.map
+            (\texture ->
+                WebGL.entity
+                    tileVS
+                    tileFS
+                    tileMesh
+                    (tileUniform texture)
+            )
+
+
+displayTiles : Model -> List Entity
+displayTiles model =
+    model.tiles
+        |> Dict.toList
+        |> List.map Tuple.second
+        |> List.filterMap (tileEntity model)
 
 
 view : Model -> Html Msg
 view model =
     div
-        -- Container
-        [ onMouseDown
-        , onWheel
-        , intreeContainerStyle model
-        ]
-        [ model.tiles
-            |> Dict.toList
-            |> List.map (\( id, tile ) -> ( id, tileImg model tile ))
-            |> node "div" [ intreeMapPaneStyle ]
+        []
+        [ WebGL.toHtml
+            [ onMouseDown
+            , onWheel
+            , intreeContainerStyle model
+            ]
+            (displayTiles model)
         , div
             -- Controls
             []

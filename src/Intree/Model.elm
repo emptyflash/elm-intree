@@ -3,6 +3,7 @@ module Intree.Model exposing (..)
 import Json.Decode.Pipeline exposing (decode, required)
 import Json.Decode as Decode exposing (float, int, string, Decoder)
 import Dict exposing (Dict)
+import WebGL.Texture as Texture exposing (Texture)
 
 
 type alias Options =
@@ -16,7 +17,7 @@ type alias Options =
 
 
 type alias Model =
-    { tiles : Dict String Tile
+    { tiles : TileMap
     , prevPosition : Point
     , dragging : Bool
     , center : Coordinate
@@ -48,13 +49,21 @@ type alias Tile =
     { x : Int
     , y : Int
     , z : Int
-    , loaded : Bool
+    , texture : Maybe Texture
     }
 
 
-tileId : Tile -> String
+tileId : Tile -> TileId
 tileId { x, y, z } =
     toString x ++ toString y ++ toString z
+
+
+type alias TileMap =
+    Dict TileId Tile
+
+
+type alias TileId =
+    String
 
 
 type alias Layer =
