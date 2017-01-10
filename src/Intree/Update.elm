@@ -117,12 +117,12 @@ update msg model =
             let
                 delta =
                     if event.deltaY > 0 then
-                        1
-                    else
                         -1
+                    else
+                        1
 
                 newModel =
-                    { model | zoomLevel = model.zoomLevel + round delta }
+                    { model | tiles = Dict.empty, zoomLevel = model.zoomLevel + round delta }
             in
                 ( newModel, loadTilesCmd )
 
