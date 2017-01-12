@@ -87,25 +87,34 @@ intreeMapPaneStyle =
 
 
 type alias Vertex =
-    { position : Vec3
-    , textureCoord : Vec2
+    { textureCoord : Vec2
+    , position : Vec3
     }
 
 
-tileMesh : Mesh Vertex
-tileMesh =
+tileMesh : Coordinate -> Tile -> Mesh Vertex
+tileMesh center tile =
     let
+        translationVec =
+            vec3
+                (toFloat tile.x - center.lng)
+                (toFloat tile.y - center.lat)
+                0
+
+        translate vec =
+            Vec3.sub vec (Vec3.scale 1.2 translationVec)
+
         topLeft =
-            { position = vec3 -1 1 0, textureCoord = vec2 0 1 }
+            { position = translate <| vec3 -1 1 0, textureCoord = vec2 0 1 }
 
         topRight =
-            { position = vec3 1 1 0, textureCoord = vec2 1 1 }
+            { position = translate <| vec3 1 1 0, textureCoord = vec2 1 1 }
 
         bottomLeft =
-            { position = vec3 -1 -1 0, textureCoord = vec2 0 0 }
+            { position = translate <| vec3 -1 -1 0, textureCoord = vec2 0 0 }
 
         bottomRight =
-            { position = vec3 1 -1 0, textureCoord = vec2 1 0 }
+            { position = translate <| vec3 1 -1 0, textureCoord = vec2 1 0 }
 
         square =
             [ ( topLeft, topRight, bottomLeft )
@@ -128,12 +137,16 @@ type alias Uniform =
     }
 
 
-tileUniform : Texture -> Uniform
-tileUniform =
-    Uniform
-        (Mat4.makeRotate 0 (vec3 0 1 0))
-        (Mat4.makePerspective 45 1 0.01 100)
-        (Mat4.makeLookAt (vec3 0 3 8) (vec3 0 0 0) (vec3 0 1 0))
+tileUniform : Model -> Texture -> Uniform
+tileUniform model =
+    let
+        apsectRatio =
+            toFloat model.options.width / toFloat model.options.height
+    in
+        Uniform
+            (Mat4.makeRotate 0 (vec3 0 1 0))
+            (Mat4.makePerspective 45 apsectRatio 0.01 100)
+            (Mat4.makeLookAt (vec3 0 0 1) (vec3 0 0 0) (vec3 0 1 0))
 
 
 tileVS : Shader Vertex Uniform Varying
@@ -174,8 +187,8 @@ tileEntity model tile =
                 WebGL.entity
                     tileVS
                     tileFS
-                    tileMesh
-                    (tileUniform texture)
+                    (tileMesh model.center tile)
+                    (tileUniform model texture)
             )
 
 

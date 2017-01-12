@@ -19,7 +19,7 @@ import List
 import Task
 import List.Extra as List
 import Dict exposing (Dict)
-import WebGL.Texture as Texture exposing (Texture, Error)
+import WebGL.Texture as Texture exposing (Texture, Error, defaultOptions, nearest, nearestMipmapNearest)
 
 
 type Msg
@@ -123,6 +123,9 @@ attemptTileTasks tileId task =
 loadTexturesCmd : String -> TileMap -> Cmd Msg
 loadTexturesCmd baseUrl tiles =
     let
+        loadOptions =
+            { defaultOptions | magnify = nearest, minify = nearestMipmapNearest }
+
         tileLoadTasks =
             tiles
                 |> Dict.toList
@@ -173,7 +176,7 @@ update msg model =
                     { model
                         | prevPosition = Point x y
                         , center =
-                            { lng = model.center.lng + moveLng
+                            { lng = model.center.lng - moveLng
                             , lat = model.center.lat + moveLat
                             }
                     }
@@ -191,7 +194,8 @@ update msg model =
                 newModel =
                     { model | tiles = Dict.empty, zoomLevel = model.zoomLevel + round delta }
             in
-                ( newModel, loadTilesCmd )
+                -- ( newModel, loadTilesCmd )
+                ( model, Cmd.none )
 
         LoadTiles ->
             let
